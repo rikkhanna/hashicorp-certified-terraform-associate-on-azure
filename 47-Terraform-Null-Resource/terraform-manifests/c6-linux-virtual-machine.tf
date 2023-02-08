@@ -24,6 +24,8 @@ resource "azurerm_linux_virtual_machine" "mylinuxvm" {
   }
   custom_data = filebase64("${path.module}/app-scripts/app1-cloud-init.txt")
   tags = local.common_tags
+
+  
 }
 
 

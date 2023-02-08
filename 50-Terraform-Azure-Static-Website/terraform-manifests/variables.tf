@@ -1,6 +1,6 @@
 # Input variable definitions
 variable "location" {
-  description = "The Azure Region in which all resources groups should be created."
+  description = "The Azure region in which all resource groups should be created."
   type        = string
 }
 variable "resource_group_name" {
@@ -31,4 +31,8 @@ variable "static_website_error_404_document" {
   description = "static website error 404 document"
   type        = string
 }
+variable "static_website_source_folder" {
+  description = "static website source folder"
+  type        = string
 
+}

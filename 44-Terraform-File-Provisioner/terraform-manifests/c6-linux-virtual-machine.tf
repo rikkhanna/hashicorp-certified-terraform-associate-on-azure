@@ -25,7 +25,7 @@ resource "azurerm_linux_virtual_machine" "mylinuxvm" {
   custom_data = filebase64("${path.module}/app-scripts/app1-cloud-init.txt")
   tags = local.common_tags
 
-# PLAY WITH /tmp folder in Virtual Machine with File Provisioner
+  # PLAY WITH /tmp folder in Virtual Machine with File Provisioner
   # Connection Block for Provisioners to connect to Azure Virtual Machine
   connection {
     type = "ssh"
@@ -54,16 +54,16 @@ resource "azurerm_linux_virtual_machine" "mylinuxvm" {
     destination = "/tmp"
   }
 
-/*
+
 # Enable this during Step-05-01 Test-1
  # File Provisioner-5: Copies the file-copy.html file to /var/www/html/file-copy.html where "azureuser" don't have permission to copy
  # This provisioner will fail but we don't want to taint the resource, we want to continue on_failure
   provisioner "file" {
     source      = "apps/file-copy.html"
     destination = "/var/www/html/file-copy.html"
-    #on_failure  = continue  # Enable this during Step-05-01 Test-2
+    on_failure  = continue  # Enable this during Step-05-01 Test-2
    } 
-*/   
+  
 }
 
 

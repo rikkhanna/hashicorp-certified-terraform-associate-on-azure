@@ -2,8 +2,8 @@
 module "azure_static_website" {
   #source = "./modules/azure-static-website"  
   #source  = "stacksimplify/staticwebsitepb/azurerm"
-  source  = "app.terraform.io/hcta-azure-demo1/staticwebsiteprivate/azurerm"
-  version = "1.0.0"  
+  source  = "app.terraform.io/hcta-azure-demo1-rick/staticwebsiteprivate/azurerm"
+  version = "2.0.0" 
 
   # Resource Group
   location            = "eastus"

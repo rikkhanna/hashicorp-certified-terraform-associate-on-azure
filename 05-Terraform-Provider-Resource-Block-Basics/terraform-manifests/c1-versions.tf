@@ -4,9 +4,9 @@ terraform {
   required_providers {
     azurerm = {
       source = "hashicorp/azurerm"
-      version = ">= 2.0"
+      # version = ">= 2.0"
       #version = "~> 2.0"             
-      #version = ">= 2.0.0, < 2.60.0"
+      version = ">= 2.0.0, < 2.60.0"
       #version = ">= 2.0.0, <= 2.64.0"   
       #version = "~> 2.64" # For Production grade              
     }

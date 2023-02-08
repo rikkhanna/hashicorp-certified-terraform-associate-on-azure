@@ -17,6 +17,8 @@ terraform {
   }   
 }
 
+
+
 #####################################################################
 # Block-2: Provider Block
 provider "azurerm" {

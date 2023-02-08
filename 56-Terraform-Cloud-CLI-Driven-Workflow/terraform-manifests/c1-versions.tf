@@ -9,7 +9,7 @@ terraform {
   }
   # Update Terraform Cloud Backend Block Information below
   backend "remote" {
-    organization = "hcta-azure-demo1"
+    organization = "hcta-azure-demo1-rick"
     workspaces {
       name = "cli-driven-azure-demo"
     }

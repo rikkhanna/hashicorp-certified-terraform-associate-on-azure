@@ -3,7 +3,7 @@ data "terraform_remote_state" "project1" {
   backend = "azurerm"
   config = {
     resource_group_name   = "terraform-storage-rg"
-    storage_account_name  = "terraformstate201"
+    storage_account_name  = "terraformstate2023"
     container_name        = "tfstatefiles"
     key                   = "network-terraform.tfstate"
   }

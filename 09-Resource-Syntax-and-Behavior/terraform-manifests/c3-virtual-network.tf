@@ -5,8 +5,8 @@ resource "azurerm_virtual_network" "myvnet" {
   location            = azurerm_resource_group.myrg.location
   resource_group_name = azurerm_resource_group.myrg.name
   tags = {
-    "Name" = "myvnet-1"
-    #"Environment" = "Dev"  # Uncomment during Step-10
+    # "Name" = "myvnet-1"
+    "Environment" = "Dev"  # Uncomment during Step-10
   }
 }
 
@@ -31,7 +31,7 @@ resource "azurerm_public_ip" "mypublicip" {
 
 # Resource-5: Create Network Interface
 resource "azurerm_network_interface" "myvmnic" {
-  name                = "vmnic"
+  name                = "vmnic1"
   location            = azurerm_resource_group.myrg.location
   resource_group_name = azurerm_resource_group.myrg.name
 
@@ -39,7 +39,7 @@ resource "azurerm_network_interface" "myvmnic" {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.mysubnet.id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id = azurerm_public_ip.mypublicip.id 
+    public_ip_address_id          = azurerm_public_ip.mypublicip.id
   }
 }
 

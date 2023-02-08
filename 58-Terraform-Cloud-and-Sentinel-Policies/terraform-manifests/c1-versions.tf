@@ -13,7 +13,7 @@ terraform {
   }
   # Terraform Backend pointed to TF Cloud
   backend "remote" {
-    organization = "hcta-azure-demo1"
+    organization = "hcta-azure-demo1-rick"
     workspaces {
       name = "sentinel-azure-demo1"
     }

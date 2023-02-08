@@ -1,0 +1,478 @@
+version: "1.0"
+stages:
+  - "clone" 
+  - "build"
+  - "scan"
+  - "push"
+  - "manifest_non_prod"
+  - "deploy"
+  - "manifest_prod"
+
+steps:
+#Step 1
+  develop_clone:
+    title: "Cloning Code repository" 
+    type: "git-clone"
+    repo: "${{CF_REPO_OWNER}}/${{CF_REPO_NAME}}"
+    revision: "develop" 
+    git: "cat-codefresh"
+    stage: "clone" 
+    when:
+      branch:
+        ignore: 
+          - /develop/
+  main_clone:
+    title: "Cloning Code repository"
+    type: "git-clone"
+    repo: "${{CF_REPO_OWNER}}/${{CF_REPO_NAME}}" 
+    revision: "${{CF _BRANCH}}"
+    git: "cat-codefresh"
+    stage: "clone"
+
+#Step 2
+  checkout_conftest_repo:
+    title: 'Cloning Conftest repository' 
+    type: git-clone 
+    repo: "cat/cat-conftest" 
+    revision: "master"
+    git: cat-codefresh 
+    stage: "clone"
+#Step 3
+  checkout_kubeval_schema_repo:
+    title: 'Cloning Kubeval repository' 
+    type: git-clone 
+    repo: "cat/cat-kubeval" 
+    revision: "master"
+    git: cat-codefresh 
+    stage: "clone"
+#Step 4
+  set_app_env_variables:
+    title: "Set Application ENV variables" 
+    type: "freestyle" 
+    image: hub.artifactory.gcp.com/codefresh/kube-helm 
+    stage: "clone" 
+    working_directory: "${{main_clone}}/${{CHANNEL}}/${{APPLICATION}}" 
+    commands:
+      - set -eu
+      - cf_export DEBUG="${DEBUG:-FALSE}"
+      - if [[ ! -f app-variables ]]; then echo "No app-variables file exists"; exit 1; fi
+      - cat app-variables >> /codefresh/volume/env_vars_to_export
+      - if find . -type f -name package.json 2> /dev/null | grep package.json > /dev/null; then cf_export BUILD_TOOL="nodejs"; else echo "This project does not need source code build"; fi
+      - cf_export prod_pipeline=$(echo "${{CF_PIPELINE_NAME}}" | sed "s/nonprod/prod/")
+      - cf_export PROD_BUILD="FALSE"
+
+#Step 5
+  run_gateway:
+    title: "Run gateway" 
+    type: "freestyle" 
+    image: digital-cat-docker.artifactory-gep.com/codefresh/logic/builder:11 
+    stage: "clone"
+    working_directory: "${{main_clone}}/${{CHANNEL}}/${{APPLICATION}}"
+    commands:
+      - ls -la
+      - cat app-variables
+      - gateway.sh
+
+#Step 6
+  schedule_just_in_time_build:
+    title: "Schedule 'just-in-time' build if image not present" 
+    type: "freestyle" 
+    image: digital-cat-docker.artifactory.gcp.com/codefresh/logic/builder:12 
+    stage: "build" 
+    working_directory: "$ {{main_clone}}/${{CHANNEL}}/${{APPLICATION}}"
+    shell: bash 
+    commands:
+    - |-
+      set -eu
+      DOCKER_URL="https://artifactory.gcp.com/artifactory/digital-cat-docker/${{HELM_TEMPLATE_NAME}}/${{TYPE}}/${{APPLICATION}}/${VERSION}/"
+      
+      echo "* Confirming availability of docker image: ${DOCKER_URL}"
+
+      HTTP_CODE=$(curl -sI -k ${DOCKER_URL} -w %{http_code}\\n -o /dev/null)
+      if [[ "${HTTP_CODE}" == "200" ]]; then 
+        echo "Docker image required available" 
+      else
+        echo "Docker image not found on Artifactory server, will schedule 'just in time' build" 
+        cf _export REBUILD_IMAGE="TRUE"
+        cf_export JUST_IN_TIME_REBUILD_IMAGE="TRUE" 
+        git checkout "${CHANGE_SHA} 
+      fi 
+    when:
+      condition:
+        all:
+        whenVarExists: '"${{REDEPLOY_IMAGE}}" == "TRUE"'
+
+#Step 7
+  UIBuild:
+    title: Build Package using NodeS 
+    stage: "build" 
+    type: "freestyle"
+    working_directory: "${{main_cLone}}/${{CHANNEL}}/${{APPLICATION}}/app"
+    image: digital-cat-docker.artifactory.gcp.com/codefresh-images/nodejs:12.22 
+    commands:
+      - if find . -type f -name yarn.lock 2> /dev/null | grep yarn.lock > /dev/null;then echo "Using yarn as package manager"; yarn; yarn build; rm -fr node _modules npm-packages-cache; else echo "Using pm as package manager";export NPM_CONFIG_REGISTRY=https://artifactory.gcp.com/artifactory/api/npm/npm-virtual/ ; export NODEJS_ORG_MIRROR=https://artifactory.gcp.com/artifactory/nodejs-dist; npm install && chmod 777./;npm run build; fi
+      - ls -l
+      - ls -l build 
+    when:
+      condition:
+        all:
+          WhenVarExists: '"${{BUILD_TOOL}}" == "nodejs"' 
+          rebuildRequired: '"${{REBUILD _IMAGE}}" == "TRUE"'
+
+#Step 7 
+  build:
+    title: "Building Docker image" 
+    type: "build" 
+    registry: "digital-cat-docker" 
+    image _name: "cat-codefresh-app-images/gke/${{APPLICATION}}" 
+    tag: ${{VERSION}}
+    tag policy: original 
+    disable_push: true 
+    no_cache: true 
+    no_cf_cache: true 
+    working_directory: "${{main_clone}}/${{CHANNEL}}/${{APPLICATION}}/app" 
+    dockerfile: "Dockerfile" 
+    stage: "build" 
+    build_arguments:
+      - GOPROXY=https://artifactory-gcp.com/artifactory/go
+      - BASE_IMAGE_IN=${{BASE_IMAGE_IN}}
+      - BASE_IMAGE_TAG_IN=${{BASE_IMAGE_TAG_IN}}
+      - CF_REPO_NAME=${{CF_REPO_NAME}}
+      - CF_BRANCH=${{CF_BRANCH}}
+      - CF_SHORT_REVISION=${{CF_SHORT_REVISION}}
+      - VERSION=${{VERSION}}
+      - CF_BUILD_ID=${{CF_BUILD_ID}}
+      - CF_COMMIT_AUTHOR=${{CF_COMMIT_AUTHOR}}
+      - CF_BUILD_INITIATOR=${{CF_BUILD_INITIATOR}}
+    metadata:
+      set:
+        - base_image_in: '${ {BASE_IMAGE _IN}}'
+        - base_ image_tag_in: '${{BASE_ IMAGE _TAG_ IN}}'
+        - short sha: '${{CF_SHORT_REVISION}}'
+        - tag: '${{VERSIONS}}'
+        - pipeline _uuid: '${{CF _BUILD_ID}}' 
+    when:
+      condition:
+        all:
+          rebuildrequired: '"${{REBUILD_ IMAGE}}" == "TRUE"'
+          debugoff: '"${{DEBUG}}" == "FALSE"'
+
+#Step 10
+  Scans:
+    title: Run scans 
+    type: parallel 
+    stage: "scan"
+    steps:
+      checkmarx_scan:
+        title: Run checkmarx scan
+        type: customer_authentication/checkmarx-scan 
+        arguments:  
+          PROJECT_NAME: "${{APPLICATION}}"
+          LOCATION_ PATH: "/codefresh/volume/${{CF_REPO_NAME}}/${{APPLICATION}}"
+        when:
+          condition:
+            all:
+              cf_condition: "'${{CHECKMARX_SCAN_NEEDED}}' == 'YES'" 
+              rebuildRequired: '"${{REBUILD IMAGE}}" == "TRUE"'
+              debugoff: '"${{DEBUG}}" == "FALSE"'
+      blackduck_scan:
+        title: Run blackduck scan
+        type: customer_authentication/blackduck-scan 
+        arguments:
+          SOURCE_PATH: "/codefresh/volume/${{CF_REPO_NAME}}/${{APPLICATION}}"
+        when:
+          condition:
+            all:
+              cf_condition: "'${{BLACKDUCK_SCAN_NEEDEDY}}' == 'YES'"
+              rebuildRequired: '"${{REBUILD_IMAGE}}" == "TRUE"'
+              debugoff: '"${{DEBUG}}" == "FALSE"'
+      twistlock_scan:
+        type: composition
+        title: Run twistlock image scan 
+        composition:
+          version: '2'
+          services:
+            imagebuild:
+              image: 'cat-codefresh-app-images/gke/${{APPLICATION}}:${{VERSION}}' 
+              entrypoint: echo
+              command: sh -c "Hello" 
+              labels:
+                build.image.id: ${{CF_BUILD_ID}}
+        composition_candidates:
+          scan_service:
+            image: digital-cat-docker.artifactory.gcp.com/codefresh-images/cat-twistcli:v2 
+            environment:
+              - TWISTLOCK_TOKEN=${{TWISTLOCK_ TOKEN}}
+              - PIPELINE_NAME=${{CF_PIPELINE_NAME}}
+              - BUILD_ID=${{CF_BUILD_ID}}
+            command: /usr/local/bin/twistcli.sh 
+            depends_on:
+              - imagebuild 
+            volumes:
+              - /var/run/docker.sock:/var/run/docker.sock 
+              - /var/lib/docker:/var/lib/docker
+        when:
+          condition:
+            all:
+              cf _condition: "'${{TWISTLOCK_SCAN_NEEDED}}' == 'YES'" 
+              rebuildrequired: '"${{REBUILD_IMAGE}}" == "TRUE"'
+              debugoff: '"${{DEBUG}}" == "FALSE"'
+      sonar_scan:
+        title: Run sonar scan
+        type: customer_authentication/sonar-scan 
+        arguments:
+            SONAR_PROPERTIES_PATH: "/codefresh/volume/${{CF_REPO_NAME}}/${{APPLICATION}}"
+        When:
+          condition:
+            all:
+              cf_condition: "'${{SONAR_SCAN_NEEDED}}' == 'YES'"
+              rebuildrequired: '"S{{REBUILD_IMAGE}}" == "TRUE"'
+              debugOff: '"${{DEBUG}}" == "FALSE"'
+
+#Step 11 
+  push:
+    title: Pushing the built image to artifactory 
+    description: pushing this built image to the docker registry 
+    stage: push 
+    type: push 
+    candidate: ${{build}}
+    image_name: "${{HELM_TEMPLATE_NAME}}/${{TYPE}}/${{APPLICATION}}"
+    registry: digital-cat-docker 
+    tag: ${{VERSION}} 
+    when:
+      condition:
+        all:
+          myCondition: build.result = "success"
+          masterBranch: '"${{CF_BRANCH}}" != "master"'
+          debugoff: '"${{DEBUG}}" == "FALSE"'
+#Step 12
+  restore_branch:
+    title: "Restore branch"
+    type: "freestyle" 
+    image: digital-cat-docker.artifactory-gcp.com/codefresh/logic/builder:12 
+    stage: "manifest_non_prod" 
+    working_directory: "${{main_clone}}" 
+    commands:
+      - git checkout ${CF_BRANCH}
+    when:
+      condition:
+        all:
+          justInTimeBuildscheduled: '"S{{JUST_IN_TIME_REBUILD_INAGE}}" == "TRUE"'
+#Step 13
+  create_manifests_nonprod:
+    title: "Create Non-Prod Manifests" 
+    type: "freestyle" 
+    stage: "manifest_non_prod" 
+    image: digital-cat-docker.artifactory-gp.com/codefresh-images/cat-cf-kustomize:v1 
+    commands:
+      - ../cat -confest/scripts/gke/manifest-creation.sh 
+    when:
+      condition:
+        all:
+          namespacePopulated: '"${{NS_LIST}}" != "NULL"'
+#Step 14
+  manifest_checks_kubeval_nonprod:
+    title: Run Kubeval for Non-Prod 
+    stage: "manifest _non_prod"
+    type: "freestyle" 
+    image: digital-cat-docker.artifactory-gp.com/codefresh-images/cat-cf-kubeval/kubeval:v2
+    Commands:
+      - ../cat-kubeval/scripts/gke/manifest-check.sh 
+    when:
+      condition:
+        all:
+          myCondition: create_manifests_nonprod.result == "success"
+
+#Step 15
+  manifest_checks_conftest_nonprod:
+    title: Run conftest for Non-Prod
+    stage: "manifest_non_prod"
+    type: "freestyle"
+    fail_fast: false
+    image: digital-cat-docker.artifactory-gcp.com/codefresh-images/cat-cf-conftest/conftest:v3 
+    commands:
+      - ../cat-conftest/scripts/gke/manifest-check.sh 
+    when:
+      condition:
+        all:
+          myCondition: create_manifests_nonprod.result == "success"
+#Step 16
+  manifest_upload_nonprod:
+    title: "Upload Manifests"
+    type: "freestyle"
+    image: hub.artifactory-gcp.com/codefresh/kube-helm
+    stage: "manifest_non_prod"
+    command:
+      - set -eu
+      - ls -l /codefresh/volume/manifests
+      - tar -cvzf S{APPLICATION}@${VERSION}_${CF_BUILD_ID}.tar.gz ../manifests
+      - curl -s -H X-JFrog-Art-Api:"${{ARTIFACTORY_TOKEN}}" -T ${APPLICATION}@${VERSION}_${CF_BUILD_ID}.tar.gz "https://artifactory.gcp.com/artifactory/digital-cat-binaries/manifests/gke/${APPLICATION}/"
+    when:
+      condition:
+        all:
+          myCondition: create_manifests_nonprod.result == "success"
+#Step 17
+  deploy_to_selected_namespaces:
+    title: Deploy to selected namespaces 
+    type: "freestyle"
+    image: digital-cat-docker.artifactory-gcp.com/codefresh/logic/builder:11 
+    stage: "deploy"
+    command:
+      - deploy-from-chart.sh
+    When:
+      condition:
+        all:
+          namespacePopulated: '"${{NS_LIST}}" == "NULL"'
+
+#Step 18
+  deployment_record_creation:
+    title: Deployment record creation 
+    type: "freestyle" 
+    image: digital-cat-docker.artifactory-gcp.com/codefresh/logic/builder:11 
+    stage: "deploy" 
+    fail_fast: false 
+    commands:
+      - set -eu
+      - export https_proxy=http://cat-codefresh-prod:$SQUID_PROXY_PASSHORD@10.180.1.13:3128 
+      - ../cat-conftest/scripts/event.sh
+    when:
+      condition:
+        all:
+          myCondition: deploy_to_selected_namespaces.result == "success"
+#Step 19
+  version_file_check:
+    title: "Check for version file change" 
+    type: "freestyle" 
+    stage: "manifest_prod" 
+    inage: hub.artifactory.gcp.com/codefresh/kube-helm
+    working_directory: "${{main_clone}}/${{APPLICATION}}"
+    shell: bash 
+    commands:
+      - git --no-pager diff HEAD~1 VERSION
+      - if [[ ${git -no-pager diff HEAD~1 VERSION | grep "+BASE_IMAGE_TAG_OUT") ]]; then echo "The BASE_IMAGE_TAG_OUT parameter has been modified"; cf_export VERSION_FILE_CHANGE="TRUE"; fi
+    when:
+      branch:
+        only:
+          - /^release.*/i
+          - /^hotfix.*/i 
+      condition:
+        all:
+          namespacePopulated: '"${{NS_LIST}}" == "NULL"'
+#Step 20 
+  extract_change_id:
+    title: "Extract changeid"
+    type: "freestyle" 
+    image: digital-cat-docker-artifactory-gp.com/codefresh/logic/builder:11 
+    stage: "manifest_prod" 
+    shell: bash 
+    commands:
+      - set -eu
+      - echo "commit message is ${{CF_COMNIT_MESSAGE}}"
+      - ID=$(echo "${{CF_COMMIT_MESSAGE}}" | grep -Po "(?<=change-id:)[^,]*" | xargs)
+      - if [[ ${ID} != ""]]; then cf_export CHANGE_ID=$ID; else echo "Change id not entered while commit please enter changeid"
+      - exit 1; fi 
+    when:
+      condition:
+        all:
+          whenVarExists: 'includes("${{VERSION_FILE_CHANGE}}", " {{VERSION_FILE_CHANGE}}") == false'
+
+#Step 21
+  check_image_availability:
+    title: "Check Docker Inage Avallability" 
+    type: "freestyle" 
+    stage: "manifest_prod" 
+    image: digital-cat-docker.artifactory.gcp.anz/codefresh/logic/builder:11
+    shell: bash
+    commands:
+      - source ${APPLICATION} /VERSION
+      - |-
+        set -eu
+        DOCKER_URL="https://artifactory.gcp.com/artifactory/digital-cat-docker/${{HELM_TEMPLATE_NAME}}/${{TYPE}}/${{APPLICATI}}/${BASE_IMAGE_TAG_OUT}/"
+        
+        echo "* Confirming availability of docker image: S{DOCKER_URL}
+
+        HITP_CODE=$(curl -sI -k ${DOCKER_URL} -w %{http_code}\\n -o /dev/null)
+        if [[ "S{HTTP_CODE}" == "404" ]]; then
+        echo Docker image not found on Artifactory server. Proceeding to Next Steps to Tag Image for Prod 
+        else
+        echo "Docker image already available with "${BASE_IMAGE_TAG_OUT}". Please Update New Tag" 
+        exit 1; fi
+    when:
+      condition:
+        all:
+          myCondition: extract_change_id.result == "success"
+
+#Step 22 
+  tag:
+    title: "Tag Docker image for prod release"
+    type: "freestyle" 
+    stage: "manifest_non_prod"
+    image: hub.artifactory-gcp.com/codefresh/cli:latest 
+    shell: bash 
+    commands:
+      - source ${APPLICATION}/VERSION
+      - export ID=$(codefresh get image --image-name ${{HELM_TEMPLATE_NAME}}/${{TYPE}}/${{APPLICATION}} --tag "${PROMOTE_IMAGE_TAG}" -o id | tr -d '\r' | uniq) 
+      - echo $ID
+      - codefresh get image --image-name ${{HELM_TEMPLATE_NAME}}/${{TYPE}}/${{APPLICATION}} --tag ${PROMOTE_IMAGE_TAG}
+      - codefresh annotate image "${ID}" -l CHANGE_ID=${{CHANGE_ID}} 
+      - codefresh tag "${ID}" "${BASE_IMAGE_TAG_OUT}"
+      - cf_export PROD_ BUILD- "TRUE" 
+    when:
+      condition:
+        all:
+          myCondition: extract_change_id.result == "success"
+#Step 23
+  create_manifest_prod:
+    title: "Create prod Manifest" 
+    type: "freestyle" 
+    stage: "manifest_prod" 
+    image: digital-cat-docker.artifactory.gcp.com/codefresh-images/cat-cf-kustomize:v1 
+    commands:
+      - ../cat -conftest/scripts/gke/manifest-creation.sh
+    when:
+      condition:
+        all:
+          myCondition: tag.result == "success"
+#Step 24
+  manifest_checks_kubeval_prod:
+    title: Run Kubeval for prod 
+    stage: "manifest_prod" 
+    type: "freestyle"
+    Image: digital-cat-docker.artifactory.gcp.com/codefresh-images/cat-cf-kubeval/kubeval:v2
+    Commands:
+      - ../cat-kubeval/scripts/gke/manifest-check.sh 
+    when:
+      condition:
+        all:
+          myCondition: tag.result == "success"
+
+#Step 25
+  manifest_checks_conftest_prod:
+    title: Run conftest for prod 
+    stage: "manifest_prod" 
+    type: "freestyle" 
+    fail_fast: false 
+    image: digital-cat-docker.artifactory.gcp.com/codefresh-images/cat-cf-conftest/conftest:v3
+    Commands:
+      - ../cat-conftest/scripts/gke/manifest-check.sh 
+    when:
+      condition:
+        all:
+          myCondition: tag.result == "success"
+#Step 26
+  manifest_upload _prod:
+    title: "Upload prod Manifests" 
+    type: "freestyle" 
+    image: hub.artifactory-gcp.com/codefresh/kube-helm 
+    stage: "manifest_prod" 
+    commands:
+      - set -eu 
+      - source $APPLICATION/VERSION
+      - ls -l /codefresh/volume/manifests 
+      - cat /codefresh/volume/manifests/*.yaml
+      - tar -cvzf ${APPLICATION}@${BASE_IMAGE_TAG_OUT}.tar.gz ../manifests
+      - curl -s -H X-JFrog-Art-Ap1:"${{ARTIFACTORY _TOKEN}}" -T ${APPLICATION}@${BASE_IMAGE_TAG_OUT}.tar.gz "https://artifactory.gcp.com/artifactory/digital-cat-binaries/manifests/gke/${APPLICATION}/"
+    when:
+      condition:
+        all:
+          myCondition: tag.result == "success"

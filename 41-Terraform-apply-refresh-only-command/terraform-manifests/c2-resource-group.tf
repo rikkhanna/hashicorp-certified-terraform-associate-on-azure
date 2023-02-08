@@ -6,5 +6,6 @@ resource "azurerm_resource_group" "myrg" {
     "tag1" = "my-tag-1"
     "tag2" = "my-tag-2"
     "tag3" = "my-tag-3"
+    "tag4" = "my-tag-4"
   }
 }
