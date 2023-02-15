@@ -124,9 +124,9 @@ steps:
     title: "Building Docker image" 
     type: "build" 
     registry: "digital-cat-docker" 
-    image _name: "cat-codefresh-app-images/gke/${{APPLICATION}}" 
+    image_name: "cat-codefresh-app-images/gke/${{APPLICATION}}" 
     tag: ${{VERSION}}
-    tag policy: original 
+    tag_policy: original 
     disable_push: true 
     no_cache: true 
     no_cf_cache: true 
@@ -146,15 +146,15 @@ steps:
       - CF_BUILD_INITIATOR=${{CF_BUILD_INITIATOR}}
     metadata:
       set:
-        - base_image_in: '${ {BASE_IMAGE _IN}}'
-        - base_ image_tag_in: '${{BASE_ IMAGE _TAG_ IN}}'
-        - short sha: '${{CF_SHORT_REVISION}}'
+        - base_image_in: '${{BASE_IMAGE_IN}}'
+        - base_image_tag_in: '${{BASE_IMAGE _TAG_IN}}'
+        - short_sha: '${{CF_SHORT_REVISION}}'
         - tag: '${{VERSIONS}}'
-        - pipeline _uuid: '${{CF _BUILD_ID}}' 
+        - pipeline_uuid: '${{CF_BUILD_ID}}' 
     when:
       condition:
         all:
-          rebuildrequired: '"${{REBUILD_ IMAGE}}" == "TRUE"'
+          rebuildrequired: '"${{REBUILD_IMAGE}}" == "TRUE"'
           debugoff: '"${{DEBUG}}" == "FALSE"'
 
 #Step 10
@@ -265,7 +265,7 @@ steps:
     stage: "manifest_non_prod" 
     image: digital-cat-docker.artifactory-gp.com/codefresh-images/cat-cf-kustomize:v1 
     commands:
-      - ../cat -confest/scripts/gke/manifest-creation.sh 
+      - ../cat-confest/scripts/gke/manifest-creation.sh 
     when:
       condition:
         all:

@@ -433,7 +433,7 @@ echo -e "${BLUE}PROCESS: Generating outcome${NOCOL}"
 ##
 
 echo -e "${BLUE}==> STAGE 1: Testing VERSION file changes: ${NOCOL}"
-VERSION_FILE_MOD-$(git diff ${PARENT1_SHA} ${GIT_SHA} --name-only -- ./VERSION)
+VERSION_FILE_MOD=$(git diff ${PARENT1_SHA} ${GIT_SHA} --name-only -- ./VERSION)
 
 if [[ -n "${VERSION_FILE_MOD}" ]]; then
     echo -e "${YELLOW}RESULT: VERSION file has changed - ${VERSION_FILE_MOD}.${NOCOL}"
@@ -478,15 +478,15 @@ if [[ -n "${VERSION_FILE_MOD}" ]]; then
             exit 0 
         fi
         
-        elif [[ -n ${PROMOTE_IMAGE_TAG_CHANGED} ]]; then
-            echo -e "${YELLOW}NOTIFICATION: PROMOTE_IMAGE_TAG changed - set REDEPLOY to TRUE as most likley outcome.${NOCOL}"
-            REDEPLOY_IMAGE="TRUE"
-            USE_PROMOTE_IMAGE_TAG="TRUE" 
-        fi 
-        echo_status
-    else
-        echo -e "${YELLOW}RESULT I VERSION file unchanged.${NOCOL}"
-    fi
+    elif [[ -n ${PROMOTE_IMAGE_TAG_CHANGED} ]]; then
+        echo -e "${YELLOW}NOTIFICATION: PROMOTE_IMAGE_TAG changed - set REDEPLOY to TRUE as most likley outcome.${NOCOL}"
+        REDEPLOY_IMAGE="TRUE"
+        USE_PROMOTE_IMAGE_TAG="TRUE" 
+    fi 
+    echo_status
+else
+    echo -e "${YELLOW}RESULT: VERSION file unchanged.${NOCOL}"
+fi
 ##    
 ## NS selection
 
@@ -494,7 +494,7 @@ if [[ -n "${VERSION_FILE_MOD}" ]]; then
 # If we don't unset the variables, then when we use the += operator, the first array value is NULL.
 
 if [[ "${NS_LIST[0]}" == "NULL" ]]; then
-    echo "Unset APP_VARS_NS _MOD & NS_LIST arrays" 
+    echo "Unset APP_VARS_NS_MOD & NS_LIST arrays" 
     unset APP_VARS_NS_MOD 
     unset NS_LIST
 fi
@@ -643,7 +643,7 @@ if [[ "${NS_LIST[0]}" == "NULL" ]]; then
         NS_LIST[0]=$(sed -n 's|^DRH1_NS=\(.*/\)\([[:digit:]]\{4\}-[[:digit:]]\{2\}-[[:digit:]]\{2\}_[[:digit:]]\{2\}:[[:digit:]]\{2\}\)*|\1|p' ./ app-variables)
         if [[ "${PLATFORM}" =~ ^ose.* ]]; then
             :
-        elif [[ "${PLATFORM}" =~ ^gke.* ]l; then
+        elif [[ "${PLATFORM}" =~ ^gke.* ]]; then
             :
         fi
     elif [[ "${GIT_BRANCH}" =~ ^master$ ]]; then 
